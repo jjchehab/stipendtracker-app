@@ -13,7 +13,9 @@
     showCategories: true,
     modal: null,            // 'settings' | 'baller' | null
     message: '',
-    form: { category: '', amount: '', name: '', date: '' },
+    form: { category: '', amount: '', name: '', date: '', currency: '' },
+    rate: null,             // result of the latest exchange-rate lookup for the entry form
+    busy: false,
     setup: null,
     settingsMsg: '',
     ballerMsg: '',
@@ -70,6 +72,70 @@
     var options = S.entryOptions();
     if (options.indexOf(ui.form.category) < 0) ui.form.category = options[0] || '';
     if (!ui.form.date) ui.form.date = todayString();
+  }
+
+  function otherCurrency() {
+    return S.state.currency === '€' ? '$' : '€';
+  }
+
+  function formCurrency() {
+    return ui.form.currency === otherCurrency() ? ui.form.currency : S.state.currency;
+  }
+
+  function formIsForeign() {
+    return formCurrency() !== S.state.currency;
+  }
+
+  function formDate() {
+    var parts = (ui.form.date || todayString()).split('-');
+    return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]), 12, 0, 0);
+  }
+
+  function shortDate(iso) {
+    var p = String(iso).split('-');
+    if (p.length !== 3) return String(iso);
+    return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2])).toLocaleString('en-US', { month: 'short', day: 'numeric' });
+  }
+
+  /** The small line under the entry form that explains the conversion. */
+  function rateHintText() {
+    if (!formIsForeign()) return '';
+    var from = formCurrency();
+    var main = S.state.currency;
+    var r = ui.rate;
+    if (!r || r.from !== from || r.day !== ui.form.date) return 'Looking up the exchange rate…';
+    if (r.failed) return 'No exchange rate is saved yet. Connect to the internet once, then try again.';
+    var line = '1 ' + from + ' = ' + main + r.rate.toFixed(4);
+    if (r.source === 'old') {
+      line = 'Offline: using the saved rate from ' + shortDate(r.asOf) + ' (' + line + ').';
+    } else if (r.asOf) {
+      line += ' · rate from ' + shortDate(r.asOf);
+    }
+    var amount = S.parseAmount(ui.form.amount);
+    if (amount !== null && amount > 0) {
+      line += ' · adds ' + main + (Math.round(Math.abs(amount) * r.rate * 100) / 100).toFixed(2);
+    }
+    return line;
+  }
+
+  function updateRateHint() {
+    var el = document.getElementById('rate-hint');
+    if (el) el.textContent = rateHintText();
+  }
+
+  function lookupRate() {
+    if (!formIsForeign()) { ui.rate = null; updateRateHint(); return; }
+    var from = formCurrency();
+    var day = ui.form.date;
+    S.getRate(from, S.state.currency, formDate()).then(function (r) {
+      if (formCurrency() !== from || ui.form.date !== day) return;
+      ui.rate = { from: from, day: day, rate: r.rate, asOf: r.asOf, source: r.source, failed: false };
+      updateRateHint();
+    }).catch(function () {
+      if (formCurrency() !== from || ui.form.date !== day) return;
+      ui.rate = { from: from, day: day, rate: 0, asOf: null, source: 'none', failed: true };
+      updateRateHint();
+    });
   }
 
   // ---------- reusable pieces ----------
@@ -246,6 +312,15 @@
 
   // ---------- screens ----------
 
+  function currencyToggle() {
+    var main = S.state.currency;
+    var other = otherCurrency();
+    var now = formCurrency();
+    return '<div class="seg mini" role="group" aria-label="Currency of this entry">' +
+      '<button data-action="entry-currency" data-value="' + main + '" class="' + (now === main ? 'on' : '') + '" aria-pressed="' + (now === main) + '">' + main + '</button>' +
+      '<button data-action="entry-currency" data-value="' + other + '" class="' + (now === other ? 'on' : '') + '" aria-pressed="' + (now === other) + '">' + other + '</button></div>';
+  }
+
   function renderHome() {
     fixFormCategory();
     var options = S.entryOptions().map(function (name) {
@@ -257,12 +332,14 @@
       '<div class="card"><h3>New entry</h3><div class="stack-sm" style="margin-top:10px">' +
       '<div class="form-row">' +
       '<div><label class="label">Category</label><select data-form="category" style="width:280px">' + options + '</select></div>' +
-      '<div><label class="label">Amount (' + esc(S.state.currency) + ')</label><input type="text" inputmode="decimal" placeholder="0.00" data-form="amount" data-enter="add-entry" style="width:130px" value="' + esc(ui.form.amount) + '"></div>' +
+      '<div><label class="label">Amount</label><div class="amount-row">' + currencyToggle() +
+      '<input type="text" inputmode="decimal" placeholder="0.00" data-form="amount" data-enter="add-entry" style="width:120px" value="' + esc(ui.form.amount) + '"></div></div>' +
       '<div><label class="label">Date</label><input type="date" data-form="date" style="width:160px" value="' + esc(ui.form.date) + '"></div>' +
       '</div>' +
       '<div class="form-row"><div class="grow"><label class="label">What was it? (optional)</label>' +
       '<input type="text" placeholder="e.g. Coffee with Ana" data-form="name" data-enter="add-entry" value="' + esc(ui.form.name) + '"></div>' +
       '<button class="pill filled" data-action="add-entry">Enter</button></div>' +
+      '<div class="rate-hint" id="rate-hint">' + esc(rateHintText()) + '</div>' +
       '<div class="msg-row"><div class="msg" id="entry-msg">' + esc(ui.message) + '</div>' +
       '<button class="pill small" data-action="undo-entry">Undo last entry</button></div>' +
       '</div></div>' +
@@ -317,7 +394,7 @@
       '<div class="col-title num">Amount</div><div></div></div>';
     items.forEach(function (e) {
       html += '<div class="row log-grid"><div class="muted">' + dateTimeText(e.date) + '</div>' +
-        '<div class="strong">' + esc(e.name || '') + '</div><div class="num strong">' + money(e.amount) + '</div>' +
+        '<div><div class="strong">' + esc(e.name || '') + '</div>' + originalNote(e) + '</div><div class="num strong">' + money(e.amount) + '</div>' +
         '<div class="num"><button class="pill small" data-action="delete-entry" data-id="' + esc(e.id) + '">Delete</button></div></div>';
     });
     if (items.length === 0) html += '<div class="empty">Nothing logged here yet.</div>';
@@ -327,7 +404,7 @@
   function renderBallerLog() {
     var list = [];
     S.state.entries.forEach(function (e) {
-      if (e.category === S.BALLER) list.push({ id: e.id, date: e.date, title: e.name || 'Spent from Baller Budget', amount: -e.amount, spending: true });
+      if (e.category === S.BALLER) list.push({ id: e.id, date: e.date, title: e.name || 'Spent from Baller Budget', amount: -e.amount, spending: true, note: originalNote(e) });
     });
     S.state.deposits.forEach(function (d) {
       list.push({ id: d.id, date: d.date, title: 'Funds added', amount: d.amount, spending: false });
@@ -345,12 +422,17 @@
       '<div class="col-title num">Amount</div><div></div></div>';
     list.forEach(function (r) {
       html += '<div class="row log-grid"><div class="muted">' + dateTimeText(r.date) + '</div>' +
-        '<div class="strong">' + esc(r.title) + '</div>' +
+        '<div><div class="strong">' + esc(r.title) + '</div>' + (r.note || '') + '</div>' +
         '<div class="num strong' + (r.amount >= 0 ? ' green-text' : '') + '">' + signedMoney(r.amount) + '</div>' +
         '<div class="num"><button class="pill small" data-action="' + (r.spending ? 'delete-entry' : 'delete-deposit') + '" data-id="' + esc(r.id) + '">Delete</button></div></div>';
     });
     if (list.length === 0) html += '<div class="empty">No funds added or spending yet.</div>';
     return html + '</div></div>';
+  }
+
+  function originalNote(e) {
+    if (!e.originalCurrency) return '';
+    return '<div class="muted small orig">' + S.moneyIn(e.originalCurrency, e.originalAmount) + ' at ' + e.rate.toFixed(4) + '</div>';
   }
 
   function sumLine(label, value) {
@@ -449,7 +531,7 @@
       '<button class="pill filled" data-action="add-cat">Add</button></div>' +
       '<div class="muted small" id="add-cat-msg">' + esc(ui.settingsMsg) + '</div></div>' +
       '<div class="card stack-sm"><h3>Archived categories</h3><div class="muted small">Archived categories are hidden from now on. Their past spending stays in your history.</div>' + archivedHtml + '</div>' +
-      '<div class="card stack-sm"><h3>Currency</h3><div class="muted small">Only the symbol changes. Nothing is converted.</div>' +
+      '<div class="card stack-sm"><h3>Currency</h3><div class="muted small">Your budgets are in this currency. When you log an entry in the other one, it is converted at that day\'s exchange rate.</div>' +
       '<div class="seg"><button data-action="set-currency" data-value="€" class="' + (S.state.currency === '€' ? 'on' : '') + '">€ Euro</button>' +
       '<button data-action="set-currency" data-value="$" class="' + (S.state.currency === '$' ? 'on' : '') + '">$ Dollar</button></div></div>' +
       '<div class="card stack-sm"><h3>Backup</h3><div class="muted small">Your data lives only on this device. Save a backup file now and then, and keep it somewhere safe.</div>' +
@@ -737,6 +819,7 @@
       render();
       return;
     }
+    if (ui.busy) return;
     amount = Math.abs(amount);
     var name = ui.form.name.trim();
     var when = new Date();
@@ -747,16 +830,53 @@
     if (!isToday) when = new Date(picked.getFullYear(), picked.getMonth(), picked.getDate(), 12, 0, 0);
 
     var category = ui.form.category;
-    S.addEntry({ category: category, amount: amount, date: when, name: name });
+    var from = formCurrency();
+    var main = S.state.currency;
+
+    if (from === main) {
+      finishEntry(category, name, when, amount, null);
+      return;
+    }
+
+    ui.busy = true;
+    var msg = document.getElementById('entry-msg');
+    if (msg) msg.textContent = 'Converting…';
+    S.getRate(from, main, picked).then(function (r) {
+      ui.busy = false;
+      var converted = Math.round(amount * r.rate * 100) / 100;
+      if (!(converted > 0)) {
+        ui.message = 'That amount is too small to convert.';
+        render();
+        return;
+      }
+      finishEntry(category, name, when, converted, { originalAmount: amount, originalCurrency: from, rate: r.rate });
+    }).catch(function () {
+      ui.busy = false;
+      ui.message = "Couldn't get an exchange rate. Connect to the internet once and try again, or switch back to " + main + '.';
+      render();
+    });
+  }
+
+  function finishEntry(category, name, when, amount, conversion) {
+    var entry = { category: category, amount: amount, date: when, name: name };
+    if (conversion) {
+      entry.originalAmount = conversion.originalAmount;
+      entry.originalCurrency = conversion.originalCurrency;
+      entry.rate = conversion.rate;
+    }
+    S.addEntry(entry);
     ui.form.amount = '';
     ui.form.name = '';
     ui.form.date = todayString();
+    ui.form.currency = '';
+    ui.rate = null;
     var suffix = name ? ' (' + name + ')' : '';
+    var shown = conversion ? S.moneyIn(conversion.originalCurrency, conversion.originalAmount) + ' → ' + money(amount) : money(amount);
 
     if (category === S.BALLER) {
-      ui.message = 'Spent ' + money(amount) + suffix + ' from the Baller Budget. Balance: ' + money(S.ballerBalance()) + '.';
+      ui.message = 'Spent ' + shown + suffix + ' from the Baller Budget. Balance: ' + money(S.ballerBalance()) + '.';
     } else {
-      ui.message = 'Added ' + money(amount) + ' to ' + category + suffix + '.';
+      ui.message = 'Added ' + shown + ' to ' + category + suffix + '.';
       if (S.sameMonth(when, new Date())) {
         var row = S.rows(new Date()).filter(function (r) { return r.name === category; })[0];
         if (row) {
@@ -848,7 +968,13 @@
       case 'add-cat': addCategoryFromModal(); break;
       case 'archive-cat': S.setArchived(el.getAttribute('data-id'), true); render(); break;
       case 'restore-cat': S.setArchived(el.getAttribute('data-id'), false); render(); break;
-      case 'set-currency': S.setCurrency(el.getAttribute('data-value')); render(); break;
+      case 'set-currency': S.setCurrency(el.getAttribute('data-value')); ui.form.currency = ''; ui.rate = null; render(); break;
+      case 'entry-currency':
+        ui.form.currency = el.getAttribute('data-value');
+        ui.rate = null;
+        render();
+        lookupRate();
+        break;
       case 'export-backup': exportBackup(); break;
       case 'pick-import': document.getElementById('import-file').click(); break;
       case 'confirm-import': {
@@ -865,7 +991,7 @@
       case 'confirm-reset':
         S.resetAll();
         ui.confirmReset = false; ui.modal = null; ui.setup = null; ui.screen = { name: 'home' };
-        ui.form = { category: '', amount: '', name: '', date: '' }; ui.message = '';
+        ui.form = { category: '', amount: '', name: '', date: '', currency: '' }; ui.rate = null; ui.message = '';
         render();
         break;
       case 'setup-currency': ui.setup.currency = el.getAttribute('data-value'); render(); break;
@@ -877,7 +1003,7 @@
       case 'setup-finish':
         if (finishSetup()) {
           ui.setup = null; ui.screen = { name: 'home' };
-          ui.form = { category: '', amount: '', name: '', date: '' }; ui.message = '';
+          ui.form = { category: '', amount: '', name: '', date: '', currency: '' }; ui.rate = null; ui.message = '';
           render();
         } else {
           document.getElementById('setup-error').textContent = ui.setup.error;
@@ -923,6 +1049,7 @@
     }
     if (t.hasAttribute('data-form')) {
       ui.form[t.getAttribute('data-form')] = t.value;
+      if (t.getAttribute('data-form') === 'amount') updateRateHint();
       return;
     }
     if (t.hasAttribute('data-setup') && ui.setup) {
@@ -1010,6 +1137,7 @@
     }
     if (t.hasAttribute('data-form')) {
       ui.form[t.getAttribute('data-form')] = t.value;
+      if (t.getAttribute('data-form') === 'date' && formIsForeign()) { ui.rate = null; updateRateHint(); lookupRate(); }
       return;
     }
     if (t.id === 'import-file') {
@@ -1070,6 +1198,12 @@
       navigator.serviceWorker.register('sw.js').catch(function () { /* offline mode just won't be available */ });
     });
   }
+
+  // Keep today's exchange rate fresh (only if you have ever used the other currency).
+  S.refreshRates();
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') S.refreshRates();
+  });
 
   render();
 })();

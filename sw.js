@@ -1,5 +1,5 @@
 /* StipendTracker offline support: keeps a copy of the app on the device. */
-var CACHE = 'stipendtracker-v1';
+var CACHE = 'stipendtracker-v2';
 var FILES = [
   './', 'index.html', 'manifest.webmanifest',
   'css/styles.css',

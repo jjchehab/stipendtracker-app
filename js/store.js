@@ -76,7 +76,8 @@
       hasCompletedSetup: false,
       currency: '€',
       merchantRules: {},
-      importedKeys: []
+      importedKeys: [],
+      rates: {}
     };
   }
 
@@ -85,13 +86,20 @@
     if (!raw || !Array.isArray(raw.entries) || !Array.isArray(raw.categories)) return null;
     var s = {
       entries: raw.entries.map(function (e) {
-        return {
+        var entry = {
           id: e.id || newId(),
           category: String(e.category),
           amount: Number(e.amount) || 0,
           date: e.date,
           name: e.name || null
         };
+        // Set only when the entry was paid in the other currency and converted.
+        if (e.originalCurrency && Number(e.originalAmount) > 0 && Number(e.rate) > 0) {
+          entry.originalAmount = Number(e.originalAmount);
+          entry.originalCurrency = String(e.originalCurrency);
+          entry.rate = Number(e.rate);
+        }
+        return entry;
       }),
       categories: raw.categories.map(function (c) {
         return {
@@ -109,7 +117,8 @@
       hasCompletedSetup: raw.hasCompletedSetup === undefined ? true : !!raw.hasCompletedSetup,
       currency: raw.currency || '€',
       merchantRules: raw.merchantRules || {},
-      importedKeys: Array.isArray(raw.importedKeys) ? raw.importedKeys : []
+      importedKeys: Array.isArray(raw.importedKeys) ? raw.importedKeys : [],
+      rates: (raw.rates && typeof raw.rates === 'object') ? raw.rates : {}
     };
     return s;
   }
@@ -409,6 +418,11 @@
       date: toISO(entry.date),
       name: entry.name || null
     };
+    if (entry.originalCurrency && entry.originalAmount > 0 && entry.rate > 0) {
+      e.originalAmount = entry.originalAmount;
+      e.originalCurrency = entry.originalCurrency;
+      e.rate = entry.rate;
+    }
     state.entries.push(e);
     save();
     return e;
@@ -479,8 +493,114 @@
     return (value < 0 ? '-' : '') + state.currency + Math.abs(value).toFixed(2);
   }
 
+  function moneyIn(symbol, value) {
+    return symbol + Math.abs(value).toFixed(2);
+  }
+
   function signedMoney(value) {
     return (value >= 0 ? '+' : '-') + state.currency + Math.abs(value).toFixed(2);
+  }
+
+
+  // ---------- exchange rates ----------
+  // Only a currency pair and a date are ever sent (for example "USD to EUR on 2026-11-19").
+  // Amounts, names and categories never leave the device. Rates are saved so they work offline.
+
+  var RATE_API = 'https://api.frankfurter.dev/v2/rate/';
+  var CODES = { '€': 'EUR', '$': 'USD' };
+
+  function ymd(date) {
+    var m = date.getMonth() + 1;
+    var d = date.getDate();
+    return date.getFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (d < 10 ? '0' : '') + d;
+  }
+
+  function fetchJSON(url) {
+    return new Promise(function (resolve, reject) {
+      var done = false;
+      var controller = window.AbortController ? new AbortController() : null;
+      var timer = setTimeout(function () {
+        if (done) return;
+        done = true;
+        if (controller) controller.abort();
+        reject(new Error('timeout'));
+      }, 7000);
+      window.fetch(url, controller ? { signal: controller.signal } : undefined).then(function (res) {
+        if (!res.ok) throw new Error('http ' + res.status);
+        return res.json();
+      }).then(function (json) {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        resolve(json);
+      }).catch(function (err) {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        reject(err);
+      });
+    });
+  }
+
+  /** The newest rate saved for a pair, of any date, or null. */
+  function newestSaved(from, to) {
+    var best = null;
+    Object.keys(state.rates).forEach(function (k) {
+      if (k.split('@')[0] !== from + '>' + to) return;
+      var r = state.rates[k];
+      if (!best || String(r.rateDate) > String(best.rateDate)) best = r;
+    });
+    return best;
+  }
+
+  /** A saved rate that is good for this date, without any internet. */
+  function savedRate(from, to, when) {
+    if (from === to) return { rate: 1, asOf: null, source: 'same' };
+    var today = ymd(new Date());
+    var day = ymd(when);
+    var past = day < today;
+    var c = state.rates[from + '>' + to + (past ? '@' + day : '')];
+    if (c && (past || c.fetchedDay === today)) return { rate: c.rate, asOf: c.rateDate, source: 'saved' };
+    return null;
+  }
+
+  /**
+   * Finds the multiplier from one currency to the other for an entry date.
+   * Resolves { rate, asOf, source } where source is 'same', 'saved', 'fresh' or 'old'
+   * ('old' means we could not reach the internet and used the newest rate we had).
+   * Rejects when there is no internet and no rate has ever been saved.
+   */
+  function getRate(from, to, when) {
+    var quick = savedRate(from, to, when);
+    if (quick) return Promise.resolve(quick);
+    if (!CODES[from] || !CODES[to]) return Promise.reject(new Error('unsupported'));
+    var today = ymd(new Date());
+    var day = ymd(when);
+    var past = day < today;
+    var key = from + '>' + to + (past ? '@' + day : '');
+    var url = RATE_API + CODES[from] + '/' + CODES[to] + (past ? '?date=' + day : '');
+    return fetchJSON(url).then(function (json) {
+      var rate = Number(json && json.rate);
+      if (!(rate > 0) || !isFinite(rate)) throw new Error('bad rate');
+      var rec = { rate: rate, rateDate: String(json.date || day), fetchedDay: today };
+      state.rates[key] = rec;
+      save();
+      return { rate: rate, asOf: rec.rateDate, source: 'fresh' };
+    }).catch(function () {
+      var old = state.rates[key] || newestSaved(from, to);
+      if (old) return { rate: old.rate, asOf: old.rateDate, source: 'old' };
+      throw new Error('no rate');
+    });
+  }
+
+  /** Keeps today's rate fresh for any pair you have used before. Safe to call often. */
+  function refreshRates() {
+    var pairs = {};
+    Object.keys(state.rates).forEach(function (k) { pairs[k.split('@')[0]] = true; });
+    Object.keys(pairs).forEach(function (pair) {
+      var parts = pair.split('>');
+      getRate(parts[0], parts[1], new Date()).catch(function () { /* offline: keep what we have */ });
+    });
   }
 
   // ---------- backup ----------
@@ -560,7 +680,11 @@
     addImported: addImported,
     undoImport: undoImport,
     money: money,
+    moneyIn: moneyIn,
     signedMoney: signedMoney,
+    getRate: getRate,
+    savedRate: savedRate,
+    refreshRates: refreshRates,
     exportJSON: exportJSON,
     importJSON: importJSON
   };

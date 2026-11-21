@@ -337,3 +337,13 @@ input[type=checkbox] { width: 16px; height: 16px; accent-color: #fff; }
   .setup .logo-lg { font-size: 32px; }
   .total-banner .v { font-size: 18px; }
 }
+
+/* ---------- entry currency toggle ---------- */
+.amount-row { display: flex; gap: 8px; align-items: stretch; }
+.seg.mini { align-self: auto; }
+.seg.mini button { padding: 9px 14px; font-size: 15px; min-width: 42px; }
+.rate-hint { font-size: 12.5px; color: var(--text2); min-height: 17px; margin-top: -2px; }
+.orig { font-weight: 500; margin-top: 1px; }
+@media (max-width: 820px) {
+  .amount-row input { flex: 1; min-width: 0; width: auto !important; }
+}
