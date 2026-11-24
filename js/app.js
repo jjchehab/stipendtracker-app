@@ -3,6 +3,8 @@
   'use strict';
 
   var S = window.Store;
+  var I18N = window.I18N;
+  var T = I18N.t;
   var money = S.money;
   var signedMoney = S.signedMoney;
 
@@ -37,6 +39,12 @@
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
+  function pl(n, one, many, vars) {
+    vars = vars || {};
+    vars.n = n;
+    return T(n === 1 ? one : many, vars);
+  }
+
   function pad(n) { return (n < 10 ? '0' : '') + n; }
 
   function todayString() {
@@ -45,15 +53,16 @@
   }
 
   function monthName(d) {
-    return d.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+    var s = d.toLocaleString(I18N.loc(), { month: 'long', year: 'numeric' });
+    return s.charAt(0).toUpperCase() + s.slice(1);
   }
 
   function dateTimeText(iso) {
-    return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+    return new Date(iso).toLocaleString(I18N.loc(), { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
   }
 
   function dateText(iso) {
-    return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return new Date(iso).toLocaleString(I18N.loc(), { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
   function statusInfo(st) {
@@ -94,7 +103,7 @@
   function shortDate(iso) {
     var p = String(iso).split('-');
     if (p.length !== 3) return String(iso);
-    return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2])).toLocaleString('en-US', { month: 'short', day: 'numeric' });
+    return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2])).toLocaleString(I18N.loc(), { month: 'short', day: 'numeric' });
   }
 
   /** The small line under the entry form that explains the conversion. */
@@ -103,17 +112,17 @@
     var from = formCurrency();
     var main = S.state.currency;
     var r = ui.rate;
-    if (!r || r.from !== from || r.day !== ui.form.date) return 'Looking up the exchange rate…';
-    if (r.failed) return 'No exchange rate is saved yet. Connect to the internet once, then try again.';
+    if (!r || r.from !== from || r.day !== ui.form.date) return T('Looking up the exchange rate…');
+    if (r.failed) return T('No exchange rate is saved yet. Connect to the internet once, then try again.');
     var line = '1 ' + from + ' = ' + main + r.rate.toFixed(4);
     if (r.source === 'old') {
-      line = 'Offline: using the saved rate from ' + shortDate(r.asOf) + ' (' + line + ').';
+      line = T('Offline: using the saved rate from {date} ({line}).', { date: shortDate(r.asOf), line: line });
     } else if (r.asOf) {
-      line += ' · rate from ' + shortDate(r.asOf);
+      line += ' · ' + T('rate from {date}', { date: shortDate(r.asOf) });
     }
     var amount = S.parseAmount(ui.form.amount);
     if (amount !== null && amount > 0) {
-      line += ' · adds ' + main + (Math.round(Math.abs(amount) * r.rate * 100) / 100).toFixed(2);
+      line += ' · ' + T('adds {amount}', { amount: main + (Math.round(Math.abs(amount) * r.rate * 100) / 100).toFixed(2) });
     }
     return line;
   }
@@ -155,9 +164,9 @@
     return '<div class="warn">This browser is not letting the page save your data, so it will be lost when you close it. Open the app in Google Chrome or the desktop app instead.</div>';
   }
 
-  function pageHead(eyebrow, title, subtitle, actionsHtml) {
+  function pageHead(eyebrow, title, subtitle, actionsHtml, userTitle) {
     return '<div class="page-head"><div><div class="eyebrow">' + esc(eyebrow) + '</div>' +
-      '<h1 class="title">' + esc(title) + '</h1>' +
+      '<h1 class="title"' + (userTitle ? ' translate="no"' : '') + '>' + esc(title) + '</h1>' +
       (subtitle ? '<div class="subtitle">' + esc(subtitle) + '</div>' : '') + '</div>' +
       (actionsHtml ? '<div class="head-actions">' + actionsHtml + '</div>' : '') + '</div>';
   }
@@ -170,7 +179,7 @@
     if (!current) {
       caption = 'Finished month, compared with each full monthly budget as it was set that month.';
     } else if (S.isGracePeriod(month)) {
-      caption = 'First days of the month: pace warnings start on day ' + (S.GRACE_DAYS + 1) + '. Until then, only going over a full budget is flagged.';
+      caption = T('First days of the month: pace warnings start on day {day}. Until then, only going over a full budget is flagged.', { day: S.GRACE_DAYS + 1 });
     } else {
       caption = 'The white mark on each bar shows where you should be by today.';
     }
@@ -188,7 +197,7 @@
       var fraction = row.budget > 0 ? row.spent / row.budget : 0;
       var tick = row.budget > 0 ? expected / row.budget : 0;
       html += '<div class="row month-grid' + (st === 'onPace' ? '' : ' tint-' + info.cls) + '">' +
-        '<div class="strong">' + esc(row.name) + '</div>' +
+        '<div class="strong" translate="no">' + esc(row.name) + '</div>' +
         '<div class="num strong" data-label="Spent">' + money(row.spent) + '</div>' +
         '<div class="num muted" data-label="Budget">' + money(row.budget) + '</div>' +
         '<div class="num" data-label="Left">' + money(row.budget - row.spent) + '</div>' +
@@ -263,7 +272,7 @@
         '<span class="chip small ' + statusInfo(s.status).cls + '">' + (s.status === 'slightlyHigh' ? 'A little over' : 'Way over') + '</span>';
       legend += '<div class="legend-row" data-name="' + esc(s.name) + '" data-amount="' + money(s.amount) + '">' +
         '<div class="dot" style="background:' + s.color + '"></div>' +
-        '<div class="legend-name"><span>' + esc(s.name) + '</span>' + over + '</div>' +
+        '<div class="legend-name"><span translate="no">' + esc(s.name) + '</span>' + over + '</div>' +
         '<div class="strong">' + money(s.amount) + '</div><div></div>' +
         '<div class="muted right">' + pctText + '</div></div>';
     });
@@ -288,7 +297,7 @@
     if (!big || !cap) return;
     if (name === null) {
       big.textContent = ring.getAttribute('data-total');
-      cap.textContent = 'Spent';
+      cap.textContent = T('Spent');
     } else {
       var row = null;
       document.querySelectorAll('.legend-row').forEach(function (el) {
@@ -319,6 +328,13 @@
     return '<div class="seg mini" role="group" aria-label="Currency of this entry">' +
       '<button data-action="entry-currency" data-value="' + main + '" class="' + (now === main ? 'on' : '') + '" aria-pressed="' + (now === main) + '">' + main + '</button>' +
       '<button data-action="entry-currency" data-value="' + other + '" class="' + (now === other ? 'on' : '') + '" aria-pressed="' + (now === other) + '">' + other + '</button></div>';
+  }
+
+  function langToggle() {
+    var l = I18N.lang();
+    return '<div class="seg" role="group" aria-label="Language">' +
+      '<button data-action="set-lang" data-value="en" translate="no" class="' + (l === 'en' ? 'on' : '') + '">English</button>' +
+      '<button data-action="set-lang" data-value="es" translate="no" class="' + (l === 'es' ? 'on' : '') + '">Español</button></div>';
   }
 
   function renderHome() {
@@ -373,9 +389,9 @@
     var diff = budget - spent;
     var summary;
     if (isCurrentMonth(month)) {
-      summary = 'In progress: ' + money(spent) + ' spent of ' + money(budget);
+      summary = T('In progress: {spent} spent of {budget}', { spent: money(spent), budget: money(budget) });
     } else {
-      summary = money(spent) + ' spent of ' + money(budget) + ', ' + (diff >= 0 ? 'surplus ' : 'deficit ') + money(Math.abs(diff));
+      summary = T(diff >= 0 ? '{spent} spent of {budget}, surplus {amount}' : '{spent} spent of {budget}, deficit {amount}', { spent: money(spent), budget: money(budget), amount: money(Math.abs(diff)) });
     }
     return '<div class="stack"><button class="back" data-action="go-history">‹ Budget History</button>' +
       pageHead('Month', monthName(month), summary) + ringCard(month) + monthTable(month) + '</div>';
@@ -389,12 +405,12 @@
     var found = rowsNow.filter(function (r) { return r.name === name; })[0];
     var budget = found ? found.budget : 0;
     var html = '<div class="stack">' + pageHead('Spending by category', name,
-      'This month: ' + money(S.spentIn(name, new Date())) + ' of ' + money(budget)) +
+      T('This month: {spent} of {budget}', { spent: money(S.spentIn(name, new Date())), budget: money(budget) }), '', true) +
       '<div class="card"><div class="row log-grid head"><div class="col-title">Date</div><div class="col-title">Name</div>' +
       '<div class="col-title num">Amount</div><div></div></div>';
     items.forEach(function (e) {
       html += '<div class="row log-grid"><div class="muted">' + dateTimeText(e.date) + '</div>' +
-        '<div><div class="strong">' + esc(e.name || '') + '</div>' + originalNote(e) + '</div><div class="num strong">' + money(e.amount) + '</div>' +
+        '<div><div class="strong" translate="no">' + esc(e.name || '') + '</div>' + originalNote(e) + '</div><div class="num strong">' + money(e.amount) + '</div>' +
         '<div class="num"><button class="pill small" data-action="delete-entry" data-id="' + esc(e.id) + '">Delete</button></div></div>';
     });
     if (items.length === 0) html += '<div class="empty">Nothing logged here yet.</div>';
@@ -404,14 +420,14 @@
   function renderBallerLog() {
     var list = [];
     S.state.entries.forEach(function (e) {
-      if (e.category === S.BALLER) list.push({ id: e.id, date: e.date, title: e.name || 'Spent from Baller Budget', amount: -e.amount, spending: true, note: originalNote(e) });
+      if (e.category === S.BALLER) list.push({ id: e.id, date: e.date, title: e.name || T('Spent from Baller Budget'), amount: -e.amount, spending: true, note: originalNote(e) });
     });
     S.state.deposits.forEach(function (d) {
-      list.push({ id: d.id, date: d.date, title: 'Funds added', amount: d.amount, spending: false });
+      list.push({ id: d.id, date: d.date, title: T('Funds added'), amount: d.amount, spending: false });
     });
     list.sort(function (a, b) { return new Date(b.date) - new Date(a.date); });
 
-    var html = '<div class="stack">' + pageHead('Spending by category', S.ballerTitle(), 'Balance: ' + money(S.ballerBalance())) +
+    var html = '<div class="stack">' + pageHead('Spending by category', S.ballerTitle(), T('Balance: {amount}', { amount: money(S.ballerBalance()) })) +
       '<div class="card stack-sm">' +
       sumLine('Starting balance', money(S.state.ballerStart)) +
       sumLine('Surplus from finished months', money(S.finishedMonthsSurplus())) +
@@ -422,7 +438,7 @@
       '<div class="col-title num">Amount</div><div></div></div>';
     list.forEach(function (r) {
       html += '<div class="row log-grid"><div class="muted">' + dateTimeText(r.date) + '</div>' +
-        '<div><div class="strong">' + esc(r.title) + '</div>' + (r.note || '') + '</div>' +
+        '<div><div class="strong" translate="no">' + esc(r.title) + '</div>' + (r.note || '') + '</div>' +
         '<div class="num strong' + (r.amount >= 0 ? ' green-text' : '') + '">' + signedMoney(r.amount) + '</div>' +
         '<div class="num"><button class="pill small" data-action="' + (r.spending ? 'delete-entry' : 'delete-deposit') + '" data-id="' + esc(r.id) + '">Delete</button></div></div>';
     });
@@ -432,7 +448,7 @@
 
   function originalNote(e) {
     if (!e.originalCurrency) return '';
-    return '<div class="muted small orig">' + S.moneyIn(e.originalCurrency, e.originalAmount) + ' at ' + e.rate.toFixed(4) + '</div>';
+    return '<div class="muted small orig">' + esc(T('{orig} at {rate}', { orig: S.moneyIn(e.originalCurrency, e.originalAmount), rate: e.rate.toFixed(4) })) + '</div>';
   }
 
   function sumLine(label, value) {
@@ -451,7 +467,7 @@
     if (ui.showCategories) {
       S.sidebarItems().forEach(function (item) {
         var active = sc.name === 'category' && sc.category === item.name;
-        html += '<button class="nav sub' + (active ? ' active' : '') + '" data-action="open-category" data-name="' + esc(item.name) + '">' + esc(item.label) + '</button>';
+        html += '<button class="nav sub' + (active ? ' active' : '') + '" data-action="open-category" data-name="' + esc(item.name) + '" translate="no">' + esc(item.archived ? T('{name} (archived)', { name: item.name }) : item.label) + '</button>';
       });
     }
     return html;
@@ -474,7 +490,7 @@
       '<div class="sum-line"><span>Spent from the Baller Budget</span><span id="b-spent">' + money(-S.ballerSpent()) + '</span></div>' +
       '<div class="hr"></div><div class="sum-line strong" style="font-size:16px"><span>Balance</span><span id="b-balance">' + money(S.ballerBalance()) + '</span></div></div>' +
       '<div class="card stack-sm"><h3>Add funds</h3><div class="edit-row">' +
-      '<input type="text" inputmode="decimal" placeholder="Amount (' + esc(S.state.currency) + ')" style="width:160px" id="b-add" data-enter="add-funds">' +
+      '<input type="text" inputmode="decimal" placeholder="' + esc(T('Amount ({currency})', { currency: S.state.currency })) + '" style="width:160px" id="b-add" data-enter="add-funds">' +
       '<button class="pill filled" data-action="add-funds">Add funds</button><span class="muted small">' + esc(ui.ballerMsg) + '</span></div>' +
       '<h3 style="margin-top:6px">Funds added</h3>' + list + '</div>' +
       '<div class="modal-actions"><button class="pill filled" data-action="close-modal">Done</button></div></div></div>';
@@ -500,7 +516,7 @@
   function renderSettingsModal() {
     var archived = S.state.categories.filter(function (c) { return c.archived; });
     var archivedHtml = archived.map(function (c) {
-      return '<div class="edit-row"><span class="grow">' + esc(c.name) + '</span>' +
+      return '<div class="edit-row"><span class="grow" translate="no">' + esc(c.name) + '</span>' +
         '<button class="pill small" data-action="restore-cat" data-id="' + esc(c.id) + '">Restore</button></div>';
     }).join('');
     if (!archivedHtml) archivedHtml = '<div class="muted">None.</div>';
@@ -531,6 +547,7 @@
       '<button class="pill filled" data-action="add-cat">Add</button></div>' +
       '<div class="muted small" id="add-cat-msg">' + esc(ui.settingsMsg) + '</div></div>' +
       '<div class="card stack-sm"><h3>Archived categories</h3><div class="muted small">Archived categories are hidden from now on. Their past spending stays in your history.</div>' + archivedHtml + '</div>' +
+      '<div class="card stack-sm"><h3>Language</h3>' + langToggle() + '</div>' +
       '<div class="card stack-sm"><h3>Currency</h3><div class="muted small">Your budgets are in this currency. When you log an entry in the other one, it is converted at that day\'s exchange rate.</div>' +
       '<div class="seg"><button data-action="set-currency" data-value="€" class="' + (S.state.currency === '€' ? 'on' : '') + '">€ Euro</button>' +
       '<button data-action="set-currency" data-value="$" class="' + (S.state.currency === '$' ? 'on' : '') + '">$ Dollar</button></div></div>' +
@@ -556,7 +573,7 @@
 
   function buildReview(result, fileName) {
     var options = S.entryOptions();
-    var fallback = options.indexOf('Other') >= 0 ? 'Other' : (options[0] || '');
+    var fallback = options.indexOf('Other') >= 0 ? 'Other' : (options.indexOf(I18N.CATS.Other) >= 0 ? I18N.CATS.Other : (options[0] || ''));
     var known = {};
     S.state.importedKeys.forEach(function (k) { known[k] = true; });
     var start = S.state.trackingStart ? new Date(S.state.trackingStart) : null;
@@ -596,28 +613,28 @@
   function importFooterText() {
     var chosen = importChosen();
     var total = chosen.reduce(function (sum, r) { return sum + r.amount; }, 0);
-    return chosen.length + ' selected · ' + money(total);
+    return T('{n} selected', { n: chosen.length }) + ' · ' + money(total);
   }
 
   function renderImportModal() {
     var r = ui.review;
     var options = S.entryOptions();
-    var summary = r.result.transactions.length + ' purchases found in ' + r.fileName;
-    if (r.result.skippedIncoming > 0) summary += ' · ' + r.result.skippedIncoming + ' incoming payments skipped';
+    var summary = pl(r.result.transactions.length, '{n} purchase found in {file}', '{n} purchases found in {file}', { file: r.fileName });
+    if (r.result.skippedIncoming > 0) summary += ' · ' + pl(r.result.skippedIncoming, '{n} incoming payment skipped', '{n} incoming payments skipped');
 
     var html = '<div class="overlay"><div class="modal wide"><h2>Review import</h2>' +
       '<div class="muted small">' + esc(summary) + '</div>';
 
     if (r.result.unreadable.length) {
-      html += '<div class="small" style="color:var(--yellow)">' + r.result.unreadable.length +
-        " lines couldn't be read and were left out:<br>" +
-        r.result.unreadable.slice(0, 4).map(function (t) { return '<span class="muted">' + esc(t) + '</span>'; }).join('<br>') + '</div>';
+      html += '<div class="small" style="color:var(--yellow)">' +
+        pl(r.result.unreadable.length, "{n} line couldn't be read and was left out:", "{n} lines couldn't be read and were left out:") + '<br>' +
+        r.result.unreadable.slice(0, 4).map(function (line) { return '<span class="muted" translate="no">' + esc(line) + '</span>'; }).join('<br>') + '</div>';
     }
 
     if (r.rows.length === 0) {
       html += '<div class="strong">I couldn\'t find any purchases in this PDF.</div>' +
         '<div class="muted small">Here is the text the app could read. If you copy it (check for personal details first) or screenshot it and send it to me, I can fix the reader.</div>' +
-        '<div class="sample">' + esc(r.result.sample) + '</div>' +
+        '<div class="sample" translate="no">' + esc(r.result.sample) + '</div>' +
         '<div class="modal-actions"><button class="pill filled" data-action="imp-cancel">Close</button></div></div></div>';
       return html;
     }
@@ -636,7 +653,7 @@
       }).join('');
       html += '<div class="row imp-grid' + (row.include ? '' : ' off') + '" data-row="' + i + '">' +
         '<input type="checkbox" data-imp="include" data-i="' + i + '"' + (row.include ? ' checked' : '') + '>' +
-        '<span class="muted">' + row.date.toLocaleString('en-US', { day: 'numeric', month: 'short' }) + '</span>' +
+        '<span class="muted">' + row.date.toLocaleString(I18N.loc(), { day: 'numeric', month: 'short' }) + '</span>' +
         '<div><input type="text" data-imp="name" data-i="' + i + '" value="' + esc(row.name) + '">' +
         (row.note ? '<div class="imp-note">' + esc(row.note) + '</div>' : '') + '</div>' +
         '<select data-imp="category" data-i="' + i + '">' + opts + '</select>' +
@@ -647,7 +664,7 @@
     var n = importChosen().length;
     html += '</div><div class="msg-row"><span class="strong" id="imp-count">' + esc(importFooterText()) + '</span>' +
       '<span class="head-actions"><button class="pill" data-action="imp-cancel">Cancel</button>' +
-      '<button class="pill filled" id="imp-run" data-action="imp-run"' + (n === 0 ? ' disabled' : '') + '>Import ' + n + '</button></span></div>' +
+      '<button class="pill filled" id="imp-run" data-action="imp-run"' + (n === 0 ? ' disabled' : '') + '>' + esc(T('Import {n}', { n: n })) + '</button></span></div>' +
       '</div></div>';
     return html;
   }
@@ -658,7 +675,7 @@
     var run = document.getElementById('imp-run');
     if (count) count.textContent = importFooterText();
     if (run) {
-      run.textContent = 'Import ' + n;
+      run.textContent = T('Import {n}', { n: n });
       run.disabled = n === 0;
     }
   }
@@ -678,7 +695,7 @@
     });
     var ids = S.addImported(list, fps, rules);
     ui.lastBatch = { ids: ids, fps: fps };
-    ui.message = 'Imported ' + chosen.length + ' entries totaling ' + money(total) + '.';
+    ui.message = pl(chosen.length, 'Imported {n} entry totaling {total}.', 'Imported {n} entries totaling {total}.', { total: money(total) });
     ui.modal = null;
     ui.review = null;
     render();
@@ -689,7 +706,7 @@
     reader.onload = function () {
       BankImport.readPdf(reader.result).then(function (text) {
         if (!text.trim()) {
-          ui.message = "Couldn't read that PDF: it has no readable text. Download the movements PDF from the Santander app and try again.";
+          ui.message = T("Couldn't read that PDF: it has no readable text. Download the movements PDF from the Santander app and try again.");
           render();
           return;
         }
@@ -697,7 +714,7 @@
         ui.modal = 'import';
         render();
       }).catch(function () {
-        ui.message = "Couldn't read that PDF. Is it the movements file from Santander?";
+        ui.message = T("Couldn't read that PDF. Is it the movements file from Santander?");
         render();
       });
     };
@@ -713,7 +730,7 @@
       ballerText: '0',
       error: '',
       cats: S.state.categories.map(function (c) {
-        return { key: S.newId(), name: c.name, budgetText: '0', fixed: c.isFixedBill };
+        return { key: S.newId(), name: I18N.catName(c.name), budgetText: '0', fixed: c.isFixedBill };
       })
     };
   }
@@ -739,6 +756,7 @@
         '<button class="pill small" data-action="setup-remove" data-key="' + esc(c.key) + '">Remove</button></div>';
     }).join('');
     return '<div class="setup">' + saveWarning() +
+      '<div style="display:flex;justify-content:flex-end">' + langToggle() + '</div>' +
       '<div class="logo-lg"><b style="font-weight:800">Stipend</b>Tracker</div>' +
       '<div class="muted" style="font-size:15px;margin-top:-10px">Let\'s set up your budget. You can change all of this later in Settings.</div>' +
       '<div class="card stack-sm"><h3>Currency</h3><div class="seg">' +
@@ -762,17 +780,17 @@
     for (var i = 0; i < s.cats.length; i++) {
       var c = s.cats[i];
       var name = c.name.trim();
-      if (!name) { s.error = 'Every category needs a name.'; return false; }
-      if (name.toLowerCase() === S.BALLER.toLowerCase()) { s.error = '"Baller Budget" is already built in. Pick another name.'; return false; }
-      if (seen[name.toLowerCase()]) { s.error = 'Two categories are named "' + name + '".'; return false; }
+      if (!name) { s.error = T('Every category needs a name.'); return false; }
+      if (name.toLowerCase() === S.BALLER.toLowerCase()) { s.error = T('"Baller Budget" is already built in. Pick another name.'); return false; }
+      if (seen[name.toLowerCase()]) { s.error = T('Two categories are named "{name}".', { name: name }); return false; }
       seen[name.toLowerCase()] = true;
       var budget = S.parseAmount(c.budgetText);
-      if (budget === null || budget < 0) { s.error = 'Check the budget for ' + name + '.'; return false; }
+      if (budget === null || budget < 0) { s.error = T('Check the budget for {name}.', { name: name }); return false; }
       result.push({ name: name, monthlyBudget: budget, isFixedBill: c.fixed });
     }
-    if (result.length === 0) { s.error = 'Add at least one category.'; return false; }
+    if (result.length === 0) { s.error = T('Add at least one category.'); return false; }
     var start = S.parseAmount(s.ballerText);
-    if (start === null) { s.error = 'Check the starting Baller Budget.'; return false; }
+    if (start === null) { s.error = T('Check the starting Baller Budget.'); return false; }
     S.completeSetup({ currency: s.currency, ballerStart: start, categories: result });
     return true;
   }
@@ -783,6 +801,7 @@
     var app = document.getElementById('app');
     if (!S.state.hasCompletedSetup) {
       app.innerHTML = '<div style="height:100%;overflow-y:auto">' + renderSetup() + '</div>';
+      I18N.apply(app);
       return;
     }
     var sc = ui.screen;
@@ -800,6 +819,7 @@
       '<div class="topbar"><button class="menu-btn" data-action="open-menu" aria-label="Menu">☰</button><div class="logo-sm"><b>Stipend</b>Tracker</div></div>' +
       '<div class="scrim" data-action="close-menu"></div>' +
       '<div class="sidebar">' + renderSidebar() + '</div><div class="main" id="main">' + main + '</div></div>' + modal;
+    I18N.apply(app);
   }
 
   function go(screen) {
@@ -815,7 +835,7 @@
   function addEntryFromForm() {
     var amount = S.parseAmount(ui.form.amount);
     if (amount === null || amount === 0) {
-      ui.message = 'Type an amount first.';
+      ui.message = T('Type an amount first.');
       render();
       return;
     }
@@ -840,19 +860,19 @@
 
     ui.busy = true;
     var msg = document.getElementById('entry-msg');
-    if (msg) msg.textContent = 'Converting…';
+    if (msg) msg.textContent = T('Converting…');
     S.getRate(from, main, picked).then(function (r) {
       ui.busy = false;
       var converted = Math.round(amount * r.rate * 100) / 100;
       if (!(converted > 0)) {
-        ui.message = 'That amount is too small to convert.';
+        ui.message = T('That amount is too small to convert.');
         render();
         return;
       }
       finishEntry(category, name, when, converted, { originalAmount: amount, originalCurrency: from, rate: r.rate });
     }).catch(function () {
       ui.busy = false;
-      ui.message = "Couldn't get an exchange rate. Connect to the internet once and try again, or switch back to " + main + '.';
+      ui.message = T("Couldn't get an exchange rate. Connect to the internet once and try again, or switch back to {main}.", { main: main });
       render();
     });
   }
@@ -874,15 +894,15 @@
     var shown = conversion ? S.moneyIn(conversion.originalCurrency, conversion.originalAmount) + ' → ' + money(amount) : money(amount);
 
     if (category === S.BALLER) {
-      ui.message = 'Spent ' + shown + suffix + ' from the Baller Budget. Balance: ' + money(S.ballerBalance()) + '.';
+      ui.message = T('Spent {shown}{suffix} from the Baller Budget. Balance: {balance}.', { shown: shown, suffix: suffix, balance: money(S.ballerBalance()) });
     } else {
-      ui.message = 'Added ' + shown + ' to ' + category + suffix + '.';
+      ui.message = T('Added {shown} to {category}{suffix}.', { shown: shown, category: category, suffix: suffix });
       if (S.sameMonth(when, new Date())) {
         var row = S.rows(new Date()).filter(function (r) { return r.name === category; })[0];
         if (row) {
           var st = S.rowStatus(row, new Date());
-          if (st === 'slightlyHigh') ui.message += " Heads up: that's a little high for this point in the month.";
-          else if (st === 'wayOver') ui.message += " Warning: that's way over where you should be.";
+          if (st === 'slightlyHigh') ui.message += T(" Heads up: that's a little high for this point in the month.");
+          else if (st === 'wayOver') ui.message += T(" Warning: that's way over where you should be.");
         }
       }
     }
@@ -894,9 +914,9 @@
   function undoEntry() {
     var removed = S.removeLastEntry();
     if (!removed) {
-      ui.message = 'Nothing to undo.';
+      ui.message = T('Nothing to undo.');
     } else {
-      ui.message = 'Removed ' + money(removed.amount) + ' from ' + removed.category + (removed.name ? ' (' + removed.name + ')' : '') + '.';
+      ui.message = T('Removed {amount} from {category}{suffix}.', { amount: money(removed.amount), category: removed.category, suffix: removed.name ? ' (' + removed.name + ')' : '' });
     }
     render();
   }
@@ -905,10 +925,10 @@
     var input = document.getElementById('b-add');
     var value = S.parseAmount(input ? input.value : '');
     if (value === null || value <= 0) {
-      ui.ballerMsg = 'Type an amount first.';
+      ui.ballerMsg = T('Type an amount first.');
     } else {
       S.addDeposit(value);
-      ui.ballerMsg = 'Added ' + money(value) + '.';
+      ui.ballerMsg = T('Added {amount}.', { amount: money(value) });
     }
     render();
   }
@@ -919,11 +939,11 @@
     var budgetText = budgetInput.value.trim();
     var budget = budgetText === '' ? 0 : S.parseAmount(budgetText);
     if (budget === null || budget < 0) {
-      ui.settingsMsg = 'Check the budget amount.';
+      ui.settingsMsg = T('Check the budget amount.');
     } else if (S.addCategory(nameInput.value, budget, false)) {
-      ui.settingsMsg = 'Added ' + nameInput.value.trim() + '.';
+      ui.settingsMsg = T('Added {name}.', { name: nameInput.value.trim() });
     } else {
-      ui.settingsMsg = 'That name is empty or already used.';
+      ui.settingsMsg = T('That name is empty or already used.');
     }
     render();
   }
@@ -950,6 +970,15 @@
           installPrompt = null;
           render();
         }
+        break;
+      case 'set-lang':
+        I18N.setLang(el.getAttribute('data-value'));
+        if (ui.setup) {
+          ui.setup.cats.forEach(function (c) { c.name = I18N.catName(c.name); });
+          ui.setup.error = '';
+        }
+        ui.message = '';
+        render();
         break;
       case 'go-home': go({ name: 'home' }); break;
       case 'go-history': go({ name: 'history' }); break;
@@ -1014,7 +1043,7 @@
         if (ui.lastBatch) {
           S.undoImport(ui.lastBatch.ids, ui.lastBatch.fps);
           ui.lastBatch = null;
-          ui.message = 'Import undone. Stores you chose to remember are still remembered.';
+          ui.message = T('Import undone. Stores you chose to remember are still remembered.');
           render();
         }
         break;
@@ -1067,7 +1096,7 @@
 
   function refreshBallerNumbers() {
     var map = {
-      'b-title': S.ballerTitle(),
+      'b-title': T(S.ballerTitle()),
       'b-surplus': money(S.finishedMonthsSurplus()),
       'b-deposits': money(S.depositsTotal()),
       'b-spent': money(-S.ballerSpent()),

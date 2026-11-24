@@ -204,9 +204,14 @@
       ['Household Supplies', ['ikea', 'leroy', 'bricor', 'bazar']]
     ];
     for (var i = 0; i < table.length; i++) {
-      if (options.indexOf(table[i][0]) < 0) continue;
+      var name = table[i][0];
+      if (options.indexOf(name) < 0) {
+        // the categories may be the Spanish defaults
+        var es = window.I18N && window.I18N.CATS ? window.I18N.CATS[name] : null;
+        if (es && options.indexOf(es) >= 0) name = es; else continue;
+      }
       for (var j = 0; j < table[i][1].length; j++) {
-        if (key.indexOf(table[i][1][j]) >= 0) return table[i][0];
+        if (key.indexOf(table[i][1][j]) >= 0) return name;
       }
     }
     return null;

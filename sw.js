@@ -1,9 +1,9 @@
 /* StipendTracker offline support: keeps a copy of the app on the device. */
-var CACHE = 'stipendtracker-v2';
+var CACHE = 'stipendtracker-v3';
 var FILES = [
   './', 'index.html', 'manifest.webmanifest',
   'css/styles.css',
-  'js/store.js', 'js/bankimport.js', 'js/app.js',
+  'js/i18n.js', 'js/store.js', 'js/bankimport.js', 'js/app.js',
   'js/vendor/pdf.min.js', 'js/vendor/pdf.worker.min.js',
   'fonts/Montserrat.ttf',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'

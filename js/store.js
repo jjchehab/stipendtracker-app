@@ -57,7 +57,15 @@
   }
 
   function parseAmount(text) {
-    var cleaned = String(text).trim().replace(',', '.');
+    var cleaned = String(text).trim().replace(/\s/g, '');
+    var lastComma = cleaned.lastIndexOf(',');
+    var lastDot = cleaned.lastIndexOf('.');
+    if (lastComma >= 0 && lastDot >= 0) {
+      // both present: whichever comes last is the decimal mark, the other is a thousands separator
+      cleaned = lastComma > lastDot ? cleaned.replace(/\./g, '').replace(',', '.') : cleaned.replace(/,/g, '');
+    } else {
+      cleaned = cleaned.replace(',', '.');
+    }
     if (cleaned === '') return null;
     var n = Number(cleaned);
     return isFinite(n) ? n : null;
@@ -187,7 +195,7 @@
       .map(function (c) { return { name: c.name, label: c.name }; });
     state.categories.forEach(function (c) {
       if (c.archived && state.entries.some(function (e) { return e.category === c.name; })) {
-        items.push({ name: c.name, label: c.name + ' (archived)' });
+        items.push({ name: c.name, label: c.name + ' (archived)', archived: true });
       }
     });
     items.push({ name: BALLER, label: BALLER });
