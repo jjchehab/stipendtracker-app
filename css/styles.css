@@ -489,3 +489,9 @@ input[type=checkbox] { width: 16px; height: 16px; accent-color: #fff; }
 .home-pair .card > * { min-width: 0; max-width: 100%; }
 .home-more { display: flex; justify-content: flex-end; }
 @media (max-width: 900px) { .home-pair { grid-template-columns: minmax(0, 1fr); } }
+
+/* New-entry form on phones: category and amount each get a full line so the number is readable */
+@media (max-width: 820px) {
+  .form-row > .field-wide { flex: 1 1 100%; }
+  .amount-row .seg.mini button { padding: 9px 12px; min-width: 38px; }
+}

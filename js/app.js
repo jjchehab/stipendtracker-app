@@ -362,8 +362,8 @@
       '<div class="muted small import-hint">Import accepts Santander PDFs and CSV files from any bank.</div>' +
       '<div class="card"><h3>New entry</h3><div class="stack-sm" style="margin-top:10px">' +
       '<div class="form-row">' +
-      '<div><label class="label">Category</label><select data-form="category" style="width:280px">' + options + '</select></div>' +
-      '<div><label class="label">Amount</label><div class="amount-row">' + currencyToggle() +
+      '<div class="field-wide"><label class="label">Category</label><select data-form="category" style="width:280px">' + options + '</select></div>' +
+      '<div class="field-wide"><label class="label">Amount</label><div class="amount-row">' + currencyToggle() +
       '<input type="text" inputmode="decimal" placeholder="0.00" data-form="amount" data-enter="add-entry" style="width:120px" value="' + esc(ui.form.amount) + '"></div></div>' +
       '<div><label class="label">Date</label><input type="date" data-form="date" style="width:160px" value="' + esc(ui.form.date) + '"></div>' +
       '</div>' +
