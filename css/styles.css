@@ -495,3 +495,9 @@ input[type=checkbox] { width: 16px; height: 16px; accent-color: #fff; }
   .form-row > .field-wide { flex: 1 1 100%; }
   .amount-row .seg.mini button { padding: 9px 12px; min-width: 38px; }
 }
+
+/* iPhone Safari: date boxes ignore their width unless the native styling is turned off */
+input[type="date"] { -webkit-appearance: none; appearance: none; min-width: 0; max-width: 100%; box-sizing: border-box; display: block; text-align: left; min-height: 44px; }
+input[type="date"]::-webkit-date-and-time-value { text-align: left; }
+.form-row input[type="date"] { width: 100%; }
+@media (min-width: 821px) { .form-row input[type="date"] { width: 160px; } }
